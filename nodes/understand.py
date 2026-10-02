@@ -47,8 +47,13 @@ class Intent(BaseModel):
     activity: str | None = Field(None, description="An activity key from the list, 'other' for an outdoor activity no key "
                                                    "covers, or null if this message doesn't mention one.")
     audience: str | None = Field(None, description="An audience key from the list, or null if this message doesn't say who.")
-    location: str | None = Field(None, description="Place named in this message, city spelled exactly as the user wrote it, as 'City, State/Country' "
-                                                   "(e.g. 'Bhopal, Madhya Pradesh'). For a journey between places use the starting place. Else null.")
+    location: str | None = Field(None, description="Place named in this message as 'City, State, Country', city spelled exactly "
+                                                   "as the user wrote it. ALWAYS add the state and country of the place the "
+                                                   "user most likely means, usually the best-known one (e.g. 'manali' -> "
+                                                   "'Manali, Himachal Pradesh, India'; 'Bhopal' -> 'Bhopal, Madhya Pradesh, "
+                                                   "India'). If you don't recognise the place, still return it "
+                                                   "exactly as written (the geocoder decides if it exists). For a "
+                                                   "journey use the starting place. Null only if no place is named.")
     window: str | None = Field(None, description=f"One of {WINDOWS}, or null if no time is mentioned.")
 
 

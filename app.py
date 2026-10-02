@@ -2,7 +2,7 @@
 import uuid
 
 import streamlit as st
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from graph import build
 
@@ -73,10 +73,14 @@ if q := st.chat_input("e.g. Is it safe to cycle to work in Bhopal this evening?"
     st.chat_message("user").markdown(q)
     with st.chat_message("assistant"), st.spinner("Checking live weather and policies..."):
         try:
-            reply = agent().invoke({"messages": [HumanMessage(q)]}, cfg(tid))["messages"][-1].content
-        except Exception:  # e.g. LLM provider down in `understand`: fail honestly, never a half-answer
-            reply = "Sorry, I'm having trouble right now and can't give advice. Please try again in a minute."
-        st.markdown(reply)
+            agent().invoke({"messages": [HumanMessage(q)]}, cfg(tid))
+        except Exception as e:  # e.g. LLM provider down/over quota in `understand`: fail honestly, never a half-answer
+            why = ("the AI service's usage limit is reached for now" if type(e).__name__ == "RateLimitError"
+                   else "something went wrong on my side")
+            reply = f"Sorry, I can't answer right now: {why}. I won't guess at advice. Please try again in a few minutes."
+            # Save the reply so the failure stays visible after the rerun below (it used to vanish).
+            # LangGraph already checkpointed the user's message before the failing node ran.
+            agent().update_state(cfg(tid), {"messages": [AIMessage(reply)]})
     st.rerun()  # refresh the sidebar title + memory panel
 
 # ---- sidebar: what the bot knows + how it works ----

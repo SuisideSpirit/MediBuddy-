@@ -177,6 +177,9 @@ if __name__ == "__main__":
     assert match("cycling", "self", {**calm, **bhopal}, ctx, None)[0]["must_quote"] == [38, 32.9]
     assert "RAIN-SYS-01" not in ids("cycling", {"rain_48h_mm": 20, "rain_hours_48h": 2, "precip_total_mm": 20})
     assert "RAIN-SYS-01" not in ids("cycling", {"rain_48h_mm": 5, "rain_hours_48h": 40})     # all-day drizzle
+    # climbing: wet rock SOP fires on recent rain even if the window is dry; calm dry day -> all-clear
+    assert ids("climbing", {"rain_past_24h_mm": 8}) == ["CLIMB-WET-01"]
+    assert ids("climbing", {}) == ["CLEAR-01"]
     # basis records the exact condition + real value, for `explain`
     hit = match("cycling", "self", {**calm, "gust_max_kmh": 48}, ctx, None)[0]
     assert hit["basis"] == ["gust_max_kmh was 48 (rule: >= 40)"], hit["basis"]

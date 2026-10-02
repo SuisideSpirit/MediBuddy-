@@ -7,6 +7,7 @@ activities:
   two_wheeler: riding a motorbike or scooter
   running: running, jogging, brisk walking or other outdoor exercise
   hiking: hiking, trekking, hill or forest walks
+  climbing: rock climbing, bouldering, mountaineering, scrambling up a peak or crag,treking
   picnic: picnic, outdoor meal, day out at a park or garden
   travel: driving, road trips, commuting, getting to a station or airport
   general_outdoor: going outside in general, no specific activity named
@@ -102,7 +103,7 @@ sops:
     title: Heat stress during exercise
     category: exercise
     severity: high
-    applies_to: {activities: [running, cycling, hiking]}
+    applies_to: {activities: [running, cycling, hiking, climbing]}
     when:
       - feels_like_max_c >= 40
     must_quote: [feels_like_max_c]
@@ -115,7 +116,7 @@ sops:
     title: Very high UV
     category: exercise
     severity: moderate
-    applies_to: {activities: [running, cycling, hiking, picnic, general_outdoor]}
+    applies_to: {activities: [running, cycling, hiking, climbing, picnic, general_outdoor]}
     when:
       - uv_max >= 8
     must_quote: [uv_max]
@@ -128,12 +129,26 @@ sops:
     title: Damaging gusts outdoors
     category: leisure
     severity: moderate
-    applies_to: {activities: [hiking, picnic, running, general_outdoor]}
+    applies_to: {activities: [hiking, climbing, picnic, running, general_outdoor]}
     when:
       - gust_max_kmh >= 50
     guidance: >
       Gusts of up to {gust_max_kmh} km/h are forecast during {hours}, strong enough to bring down branches. Stay
       away from tall trees and loose structures, and secure anything that could blow away.
+
+  - id: CLIMB-WET-01
+    title: Wet rock for climbers
+    category: exercise
+    severity: high
+    applies_to: {activities: [climbing]}
+    when:
+      - precip_prob_max_pct >= 50
+      - precip_total_mm >= 1
+      - rain_past_24h_mm >= 5          # rock stays wet and slick for hours after rain stops
+    guidance: >
+      Rock will be wet or likely to get wet in {place} during {hours}: {precip_prob_max_pct}% rain chance,
+      {precip_total_mm} mm forecast, and {rain_past_24h_mm} mm in the past 24 hours. Wet rock loses friction and
+      holds stay slippery after the rain stops, so postpone outdoor climbing or choose an indoor wall.
 
   - id: TRAVEL-RAIN-01
     title: Rain disruption to road travel
@@ -243,7 +258,7 @@ sops:
     title: No weather-risk policy triggered
     category: general
     severity: info
-    applies_to: {activities: [cycling, two_wheeler, running, hiking, picnic, travel, general_outdoor]}
+    applies_to: {activities: [cycling, two_wheeler, running, hiking, climbing, picnic, travel, general_outdoor]}
     default: true
     when:   # "normal conditions" envelope: outside it, an all-clear isn't defensible -> no guidance
       - feels_like_min_c > 0 and feels_like_max_c < 40 and gust_max_kmh < 60 and precip_total_mm < 10 and uv_max < 11

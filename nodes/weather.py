@@ -37,8 +37,23 @@ def _get(url, **params):
     return r.json()
 
 
+def pick_place(results, hint=""):
+    """Score each result by how many parts of the hint ('himachal pradesh, india') its state/country contain; best
+    score wins, population breaks ties. Partial matches count, since the LLM may say 'USA' where the API says
+    'United States'.
+    Neither the API's first result nor the biggest town is reliably the one meant: 'Greenland' came back first as a
+    Barbados village, and 'Manali' as a Chennai suburb (bigger than the hill town). So understand adds the state
+    ('Manali, Himachal Pradesh, India') and the hint decides; population is only the fallback."""
+    parts = [p.strip() for p in hint.lower().split(",") if p.strip()]
+
+    def score(r):
+        where = f"{r.get('admin1', '')} {r.get('country', '')}".lower()
+        return sum(p in where for p in parts), r.get("population") or 0
+    return max(results, key=score)  # ties: first result wins
+
+
 def geocode(state: State):
-    """'Bhopal, Madhya Pradesh' -> search 'Bhopal', prefer the result whose state/country matches the hint, else first."""
+    """'Bhopal, Madhya Pradesh' -> search 'Bhopal', then pick_place()."""
     name, _, hint = state["location"].partition(",")
     name, hint = name.strip(), hint.strip().lower()
     try:
@@ -47,8 +62,7 @@ def geocode(state: State):
         return {"error": f"the location service is unreachable ({type(e).__name__})"}
     if not results:
         return {"error": f"I couldn't find a place called '{name}'"}
-    best = next((r for r in results
-                 if hint and hint in f"{r.get('admin1', '')} {r.get('country', '')}".lower()), results[0])
+    best = pick_place(results, hint)
     label = ", ".join(filter(None, [best["name"], best.get("admin1"), best.get("country")]))
     return {"place": {"name": label, "lat": best["latitude"], "lon": best["longitude"]}}
 
@@ -147,3 +161,18 @@ if __name__ == "__main__":
     except ValueError:
         pass
     print("summarise ok")
+    # place picking: biggest wins; a state/country hint narrows first
+    res = [{"name": "Greenland", "country": "Barbados", "population": 623},
+           {"name": "Greenland", "admin1": "New Hampshire", "country": "United States", "population": 3417},
+           {"name": "Greenland", "population": 56025}]
+    assert pick_place(res)["population"] == 56025
+    assert pick_place(res, "new hampshire")["admin1"] == "New Hampshire"
+    assert pick_place([{"name": "A"}, {"name": "B"}])["name"] == "A"  # no population data: first result
+    manali = [{"name": "Manali", "admin1": "Tamil Nadu", "country": "India", "population": 35248},
+              {"name": "Manali", "admin1": "Himachal Pradesh", "country": "India", "population": 8096}]
+    assert pick_place(manali, "himachal pradesh, india")["admin1"] == "Himachal Pradesh"  # multi-part hint
+    assert pick_place(manali, "Himachal Pradesh")["admin1"] == "Himachal Pradesh"
+    spring = [{"name": "Springfield", "admin1": "Missouri", "country": "United States", "population": 169176},
+              {"name": "Springfield", "admin1": "Illinois", "country": "United States", "population": 114394}]
+    assert pick_place(spring, "illinois, usa")["admin1"] == "Illinois"   # 'usa' != 'United States', state still wins
+    print("pick_place ok")

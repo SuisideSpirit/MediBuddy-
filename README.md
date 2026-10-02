@@ -93,7 +93,7 @@ All control flow is in [graph.py](graph.py), in four small router functions. Eac
 | [understand](nodes/understand.py) | LLM + code | Turns the message into `activity`, `audience`, `location`, `window`, `on_topic` and `explain`. The LLM may only pick keys listed in `sops.yaml`; code rejects anything else and merges with session memory. |
 | [explain](nodes/explain.py) | code | "Why did you say that?" Replays the saved last decision: each SOP, its trigger condition and the real value. No new fetch, so it can't contradict the earlier answer. |
 | [ask_location](nodes/ask_location.py) | code | Fixed question. Activity and time stay in memory, so the next message can be just a city. |
-| [geocode](nodes/weather.py) | code | City → coordinates (Open-Meteo geocoding). "Bhopal, Madhya Pradesh" prefers the result in that state, otherwise the first. |
+| [geocode](nodes/weather.py) | code | City → coordinates (Open-Meteo geocoding). `understand` supplies "Manali, Himachal Pradesh, India"; results are scored by matching state/country, then population. |
 | [fetch_weather](nodes/weather.py) | code | Hourly forecast (with the past 24 h) → 14 metrics for the asked window. **Every number the bot can quote is computed and rounded here, once.** |
 | [weather_failed](nodes/weather.py) | code | One honest fallback for all failures: place not found, geocoder down, forecast down or incomplete. Contains no weather numbers. |
 | [match_sops](nodes/match_sops.py) | code (+ LLM for the fuzzy SOP) | Evaluates every SOP's conditions, ranks the matches, fills `{placeholders}` with live numbers, and records why each fired. |
@@ -138,7 +138,7 @@ Fields are documented at the top of [sops.yaml](sops.yaml). In short:
 
 Conditions are parsed with a regex into `(metric, operator, value)` and evaluated by code. There is no `eval`. Only the six comparison operators and the known metric names are accepted.
 
-### Catalogue: 15 SOPs, 7 categories, 5 severities, 1 fuzzy
+### Catalogue: 16 SOPs, 7 categories, 5 severities, 1 fuzzy
 
 | ID | Applies to | Triggers when | Severity |
 |---|---|---|---|
@@ -147,11 +147,12 @@ Conditions are parsed with a regex into `(metric, operator, value)` and evaluate
 | COLD-EXT-01 | any | feels-like ≤ −20 °C | critical |
 | HEAT-EXT-01 | any | feels-like ≥ 45 °C | critical |
 | WIND-RIDE-01 | cycling, two-wheeler | gusts ≥ 40 km/h | high |
-| HEAT-EX-01 | running, cycling, hiking | feels-like ≥ 40 °C | high |
+| HEAT-EX-01 | running, cycling, hiking, climbing | feels-like ≥ 40 °C | high |
+| CLIMB-WET-01 | climbing | rain chance ≥ 50%, or ≥ 1 mm in the window, or ≥ 5 mm in the past 24 h (rock stays wet) | high |
 | HEAT-VUL-01 | any · children, elderly, pets | feels-like ≥ 35 °C | high |
 | RAIN-RIDE-01 | cycling, two-wheeler | rain chance ≥ 60% or ≥ 2 mm | moderate |
 | UV-01 | exercise, picnic, general outdoor | UV ≥ 8 | moderate |
-| WIND-OUT-01 | hiking, picnic, running, general | gusts ≥ 50 km/h | moderate |
+| WIND-OUT-01 | hiking, climbing, picnic, running, general | gusts ≥ 50 km/h | moderate |
 | TRAVEL-RAIN-01 | travel | ≥ 7.5 mm or rain chance ≥ 80% | moderate |
 | COLD-01 | any | feels-like between −20 and 0 °C | moderate |
 | COLD-VUL-01 | any · children, elderly, pets | temperature ≤ 10 °C | low |
@@ -231,7 +232,7 @@ RAIN-SYS-01 therefore matches on **persistence** as well as volume: `rain_hours_
 | Adversarial (≥1) | `injection` (fake SOP-99), `fake_numbers` (user claims 5 km/h), `antarctica` (silent all-clear), `uncovered_extreme` (weather no SOP covers) | ✅ ✅ ✅ ✅ |
 | Extra | `follow_up` (memory), `explain_why`, `explain_nothing`, `new_sop` (live SOP add) | ✅ ✅ ✅ ✅ |
 
-In 13 of the 15 replies where an SOP applied, the LLM's own wording passed `verify()`. The other two used the template: `llm_down_compose` (deliberately) and `antarctica` (the wording missed a `must_quote` number). The user still got correct, cited advice in both.
+In 13 of the 15 replies where an SOP applied, the LLM's own wording passed `verify()` (the run before it: 12 of 15, with `short_downpour` also falling back, which is normal run-to-run variation). The other two used the template: `llm_down_compose` (deliberately) and `antarctica` (the wording missed a `must_quote` number). The user still got correct, cited advice in both.
 
 **Why these adversarial cases:** the user's text is the one input the business doesn't control. The likeliest breaks are (a) talking the model out of its policy or into citing a fake one, (b) planting numbers the model repeats as if they were the forecast, and (c) the quieter failure that turned out to be real: **a rule set that silently says "fine" because no rule covers the situation** (Antarctica, adult travel at 42 °C feels-like).
 
@@ -245,6 +246,7 @@ In 13 of the 15 replies where an SOP applied, the LLM's own wording passed `veri
   - **Rejected citations:** gpt-oss writes `【WIND‑RIDE‑01】` with full-width brackets and non-breaking hyphens, so `verify()` rejected correct replies. Fixed by normalising before checking.
   - **Missing numbers:** the LLM cited the rain system without its numbers, which led to `must_quote`.
   - **The brief's own Bhopal event wasn't flagged** as a rain system, which led to the persistence rule (see the rain-system section above).
+  - **A regression from my own fix:** telling `understand` to always add the state ("Manali" → "Manali, Himachal Pradesh, India") made it drop places it didn't recognise, so "hiking in Xqzvbtown" asked for a city instead of saying the place wasn't found. `unknown_place` caught it, and an unknown place is now passed through for the geocoder to judge.
 - **The eval criteria were corrected once, openly:** the citation check first required `[ID]` square brackets. The brief requires traceability, not a format, so it now accepts the id in any form. The code-written footer is still required.
 
 ### Will the severe-weather case still pass after the event?
@@ -266,7 +268,7 @@ Going further, I'd record a fixture automatically whenever a live run finds seve
 - **The verifier checks numbers, citations and required values, not full meaning.** The LLM could still add a softer reassurance in its own words. The prompt forbids it, but code doesn't enforce it yet. A planned phrase-list check under moderate-or-worse SOPs would narrow this.
 - **Reading the question depends on the LLM.** For example, "grandpa's walk" has been read as `running` and as `general_outdoor` on different runs. The footer's *Interpreted as* line makes a misreading visible to the user.
 - **A journey is checked at one point** (the start), not along the route.
-- **The first geocoding match is used** when the state isn't given. The footer shows the resolved place so a wrong town is visible.
+- **Same-named places:** the place search's first result isn't reliably the one meant ("Greenland" came back as a 623-person village in Barbados; "Manali" as a Chennai suburb rather than the Himachal hill town). `understand` therefore always adds the state and country of the place the user most likely means, and `pick_place()` scores results by how many of those parts match, with population only as a tie-breaker. That's still an LLM guess about intent, so the footer shows the resolved place and the user can name the state to correct it. A whole country resolves to its geographic centre (for Greenland, the ice sheet).
 - **Sessions are in-memory:** lost on restart, and the chat list is shared by all browser tabs (fine for a local demo).
 - **Security events** (unrest, attacks) are out of scope. There's no reliable live city-level source, and a false all-clear there would be worse than saying nothing.
 - SOP thresholds are reasonable starting values chosen to be checkable. They are not medical or meteorological authority.
@@ -278,7 +280,7 @@ Going further, I'd record a fixture automatically whenever a live run finds seve
 ```
 app.py                  Streamlit chat UI: sessions, memory panel, last decision, live graph diagram
 graph.py                LangGraph: nodes, 4 routers, checkpointer (all control flow)
-sops.yaml               POLICY: activities, audiences, 15 SOPs (no code)
+sops.yaml               POLICY: activities, audiences, 16 SOPs (no code)
 nodes/
   state.py              graph state: session memory, last_decision, per-turn fields
   understand.py         LLM → closed keys; merge with memory; structured-output fallback
