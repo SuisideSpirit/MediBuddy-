@@ -1,0 +1,43 @@
+# Picnics and general outings (includes the fuzzy picnic SOP).
+# Field reference: sops/README.md. Validate after editing:  python policy.py
+sops:
+  - id: WIND-OUT-01
+    title: Damaging gusts outdoors
+    category: leisure
+    severity: moderate
+    applies_to: {activities: [hiking, climbing, picnic, running, general_outdoor]}
+    when:
+      - gust_max_kmh >= 50
+    guidance: >
+      Gusts of up to {gust_max_kmh} km/h are forecast during {hours}, strong enough to bring down branches. Stay
+      away from tall trees and loose structures, and secure anything that could blow away.
+
+  - id: PICNIC-01
+    title: Picnic suitability
+    category: leisure
+    applies_to: {activities: [picnic]}
+    judgement:
+      uses: [temp_max_c, feels_like_max_c, precip_prob_max_pct, precip_total_mm, wind_max_kmh, uv_max]
+      criteria: >
+        A good picnic day is dry (low rain chance, no meaningful rain), comfortably warm rather than hot or chilly,
+        with no more than a light breeze, and sun that is pleasant rather than harsh. "fair" if one thing is off
+        but manageable with planning (a modest shower chance, a warm afternoon, a breezy spell). "poor" if rain is
+        likely, it is uncomfortably hot or cold, or the wind would make eating outside unpleasant.
+      verdicts:
+        good:
+          severity: info
+          guidance: >
+            Conditions in {place} during {hours} look good for a picnic: up to {temp_max_c}°C with a
+            {precip_prob_max_pct}% rain chance and winds up to {wind_max_kmh} km/h.
+        fair:
+          severity: low
+          guidance: >
+            A picnic in {place} during {hours} is workable with some planning: up to {temp_max_c}°C (feels like
+            {feels_like_max_c}°C), {precip_prob_max_pct}% rain chance, winds up to {wind_max_kmh} km/h. Pick a
+            shaded spot near shelter and keep a backup plan.
+        poor:
+          severity: moderate
+          guidance: >
+            Conditions in {place} during {hours} are not well suited to a picnic: up to {temp_max_c}°C (feels like
+            {feels_like_max_c}°C), {precip_prob_max_pct}% rain chance and winds up to {wind_max_kmh} km/h. Consider
+            another day or an indoor alternative.

@@ -4,9 +4,17 @@ import uuid
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
 
+import policy
 from graph import build
 
 st.set_page_config(page_title="Weather Safety Advisor", page_icon="🌦️")
+
+# Policy is validated before anything else; a malformed SOP file stops the app and names the file + SOP.
+try:
+    policy.load()
+except policy.PolicyError as e:
+    st.error(f"The policy files are invalid, so the bot won't start: {e}")
+    st.stop()
 
 
 @st.cache_resource
@@ -14,11 +22,11 @@ def agent():
     return build()
 
 
-@st.cache_resource
 def sessions():
-    # thread_id -> title. Messages + memory live in the graph's checkpointer under the same thread_id.
-    # ponytail: in-memory, lost on server restart (brief says that's fine); SqliteSaver if persistence is ever needed.
-    return {}
+    # thread_id -> title, per visitor (a public URL must not show one visitor's chats to another).
+    # Messages + memory live in the graph's checkpointer under the same thread_id.
+    # ponytail: in-memory, lost on refresh/restart (brief says memory resets between sessions); SqliteSaver if needed.
+    return st.session_state.setdefault("sessions", {})
 
 
 def cfg(tid):
@@ -67,7 +75,13 @@ st.caption("Advice comes only from our written policies (SOPs) and live Open-Met
 for m in messages(tid):
     st.chat_message("user" if isinstance(m, HumanMessage) else "assistant").markdown(m.content)
 
+MAX_QUESTIONS = 30  # per visitor: a public demo URL shouldn't let one visitor burn the whole free LLM quota
+
 if q := st.chat_input("e.g. Is it safe to cycle to work in Bhopal this evening?"):
+    st.session_state.asked = st.session_state.get("asked", 0) + 1
+    if st.session_state.asked > MAX_QUESTIONS:
+        st.warning(f"Demo limit reached ({MAX_QUESTIONS} questions per visit) to protect the shared free LLM quota.")
+        st.stop()
     if sessions()[tid] == "New chat":
         sessions()[tid] = q[:40] + ("…" if len(q) > 40 else "")
     st.chat_message("user").markdown(q)

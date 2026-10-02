@@ -1,0 +1,71 @@
+# Situational and extreme-weather SOPs. They apply to ANY outdoor question.
+# Field reference: sops/README.md. Validate after editing:  python policy.py
+sops:
+  - id: RAIN-SYS-01
+    title: Active heavy-rain system
+    category: weather_system
+    severity: critical
+    situational: true   # a weather SYSTEM: outranks everything and is named before any activity advice
+    applies_to: {activities: any}
+    when:
+      - rain_past_24h_mm >= 64.5                              # IMD "heavy rain" = 64.5 mm+ in 24 h
+      - rain_next_24h_mm >= 64.5
+      - rain_past_24h_mm >= 35 and rain_next_24h_mm >= 35     # sustained system: neither day extreme alone
+      # persistent system: rain that barely stops, though no hour or day is "heavy" (calibrated on Jun-Sep 2026:
+      # fires on ~10% of monsoon days in Bhopal, 7% Pune, 22% Jabalpur; catches the 3-4 Sep MP system)
+      - rain_hours_48h >= 30 and rain_48h_mm >= 30
+    must_quote: [rain_hours_48h, rain_48h_mm]
+    guidance: >
+      A rain system is affecting {place}: rain in {rain_hours_48h} of the past and next 48 hours, totalling
+      {rain_48h_mm} mm ({rain_past_24h_mm} mm in the past 24 hours, {rain_next_24h_mm} mm forecast for the next 24).
+      Treat any outdoor plan as high risk regardless of activity. Avoid non-essential trips, waterlogged roads and underpasses, and check the IMD district warnings
+      for your area before going out.
+
+  - id: STORM-01
+    title: Thunderstorm in the window
+    category: weather_system
+    severity: critical
+    situational: true   # a weather SYSTEM: outranks everything and is named before any activity advice
+    applies_to: {activities: any}
+    when:
+      - thunderstorm == true
+    guidance: >
+      Thunderstorms are forecast in {place} during {hours}. Postpone outdoor plans for that window. If you are
+      caught outside, get inside a building or a closed car; avoid open ground, isolated trees and water.
+
+  - id: COLD-EXT-01
+    title: Extreme cold
+    category: weather_system
+    severity: critical
+    applies_to: {activities: any}
+    when:
+      - feels_like_min_c <= -20
+    must_quote: [feels_like_min_c]
+    guidance: >
+      It will feel as cold as {feels_like_min_c}°C in {place} during {hours}. At this level exposed skin can
+      get frostbite within minutes and hypothermia sets in fast. Do not go out for {activity}; if you must go
+      outside, keep it brief, cover all skin and do not go alone.
+
+  - id: HEAT-EXT-01
+    title: Extreme heat
+    category: weather_system
+    severity: critical
+    applies_to: {activities: any}
+    when:
+      - feels_like_max_c >= 45
+    must_quote: [feels_like_max_c]
+    guidance: >
+      It will feel as hot as {feels_like_max_c}°C in {place} during {hours}, a level at which heatstroke can
+      develop even at rest. Avoid going out for {activity} during this window; if you must, stay in shade, keep
+      exertion minimal and drink water regularly.
+
+  - id: COLD-01
+    title: Freezing conditions
+    category: weather_system
+    severity: moderate
+    applies_to: {activities: any}
+    when:
+      - feels_like_min_c <= 0 and feels_like_min_c > -20
+    guidance: >
+      It will feel as cold as {feels_like_min_c}°C in {place} during {hours}. Wear insulated layers, cover hands,
+      ears and face, and watch for ice on paths and roads.

@@ -1,0 +1,15 @@
+# Road travel.
+# Field reference: sops/README.md. Validate after editing:  python policy.py
+sops:
+  - id: TRAVEL-RAIN-01
+    title: Rain disruption to road travel
+    category: travel
+    severity: moderate
+    applies_to: {activities: [travel]}
+    when:
+      - precip_total_mm >= 7.5
+      - precip_prob_max_pct >= 80
+    guidance: >
+      {precip_total_mm} mm of rain is forecast during {hours} (up to {precip_prob_max_pct}% chance). Expect slow
+      traffic and possible waterlogging. Allow extra time, avoid flooded stretches and underpasses, and check
+      traffic or transport updates before you leave.

@@ -22,7 +22,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):  # not under pytest capture
+    sys.stdout.reconfigure(encoding="utf-8")
 
 import requests
 from langchain_core.messages import HumanMessage
@@ -107,6 +108,13 @@ def cites(t, sop_id):
     return sop_id in t["body"] and sop_id in t["footer"]
 
 
+def override_led(t):
+    """Situational branch taken, and the code-written first line names the weather system before any activity advice."""
+    first = t["body"].splitlines()[0]
+    return ((t["path"][-2:] == ["override", "compose"], f"override branch not taken, path {t['path']}"),
+            ("RAIN-SYS-01" in first, f"first line doesn't name the rain system: {first[:80]!r}"))
+
+
 def check(*conds):
     """conds: (bool, description). Returns (passed, detail) listing every failed condition."""
     failed = [d for ok, d in conds if not ok]
@@ -188,7 +196,7 @@ def jabalpur_replay():
         t, = chat("is it safe to go for a bike ride in Jabalpur today?")
     m = t["state"]["weather"]["metrics"]
     t["note"] = f"replayed metrics: {json.dumps(m)}"
-    return check((t["sops"][:1] == ["RAIN-SYS-01"], f"SOPs {t['sops']}"),
+    return check(*override_led(t), (t["sops"][:1] == ["RAIN-SYS-01"], f"SOPs {t['sops']}"),
                  (numbers(t["body"]) >= {m["rain_hours_48h"], m["rain_48h_mm"]}, "doesn't quote wet hours + 48h total"),
                  grounded(t)), t
 
@@ -204,7 +212,7 @@ def bhopal_replay():
         t, = chat("is it safe to go for a bike ride in Bhopal today?")
     m = t["state"]["weather"]["metrics"]
     t["note"] = f"replayed metrics: {json.dumps(m)}"
-    return check((t["sops"][:1] == ["RAIN-SYS-01"], f"RAIN-SYS-01 did not lead; SOPs {t['sops']}; "
+    return check(*override_led(t), (t["sops"][:1] == ["RAIN-SYS-01"], f"RAIN-SYS-01 did not lead; SOPs {t['sops']}; "
                   f"rain {m['rain_48h_mm']} mm in 48h, wet hours {m['rain_hours_48h']}"),
                  (numbers(t["body"]) >= {m["rain_hours_48h"], m["rain_48h_mm"]}, "doesn't quote wet hours + 48h total"),
                  grounded(t)), t
@@ -353,12 +361,18 @@ def explain_nothing():
 
 
 # ================================================================ 8. Live SOP addition (no code change)
-@case("New SOP", "A brand-new SOP added only to the YAML takes effect on the next message, no code change, no restart.",
-      "New SOP EVAL-NEW-01 (in a temp copy of sops.yaml) is matched and cited.", "controlled: 33°C")
+def sops_copy():
+    tmp = Path(tempfile.mkdtemp()) / "sops"
+    shutil.copytree(ROOT / "sops", tmp)
+    return tmp
+
+
+@case("New SOP", "A brand-new SOP added only to a YAML file takes effect on the next message, no code change, no restart.",
+      "New SOP EVAL-NEW-01 (appended to a temp copy of sops/outdoor_exercise.yaml) is matched and cited.",
+      "controlled: 33°C")
 def new_sop():
-    tmp = Path(tempfile.mkdtemp()) / "sops.yaml"
-    shutil.copy(ROOT / "sops.yaml", tmp)
-    with tmp.open("a", encoding="utf-8") as f:
+    tmp = sops_copy()
+    with (tmp / "outdoor_exercise.yaml").open("a", encoding="utf-8") as f:
         f.write("""
   - id: EVAL-NEW-01
     title: Warm-weather running pace
@@ -370,9 +384,31 @@ def new_sop():
     guidance: >
       It will reach {temp_max_c}°C during {hours}. Run at an easier pace than usual and carry water.
 """)
-    with patch("nodes.understand.SOPS", tmp), forecast_is(controlled(temperature_2m=33, apparent_temperature=34)):
+    with patch("policy.SOPS_DIR", tmp), forecast_is(controlled(temperature_2m=33, apparent_temperature=34)):
         t, = chat("Thinking of going for a jog in Chennai this afternoon")
     return check((cites(t, "EVAL-NEW-01"), f"new SOP not cited, SOPs {t['sops']}")), t
+
+
+@case("New SOP", "A malformed SOP (typo'd field name) is refused, not silently skipped, and the error names the file "
+      "and SOP (guide: 'malformed SOP file -> the app refuses to start and names the file').",
+      "Path understand -> intake_failed (no weather call, no advice); reply names travel.yaml and BAD-01.", "none")
+def malformed_sop():
+    tmp = sops_copy()
+    with (tmp / "travel.yaml").open("a", encoding="utf-8") as f:
+        f.write("""
+  - id: BAD-01
+    title: Typo in a field name
+    category: travel
+    severity: high
+    applies_to: {activities: [travel]}
+    wehn:
+      - gust_max_kmh >= 40
+    guidance: Gusts {gust_max_kmh} km/h.
+""")
+    with patch("policy.SOPS_DIR", tmp):
+        t, = chat("Is it safe to drive to Pune today?")
+    return check((t["path"] == ["understand", "intake_failed"], f"path {t['path']}"),
+                 ("travel.yaml" in t["body"] and "BAD-01" in t["body"], "error doesn't name the file and SOP")), t
 
 
 # ---------------------------------------------------------------- runner + report

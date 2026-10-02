@@ -1,0 +1,26 @@
+# Children, elderly people and pets.
+# Field reference: sops/README.md. Validate after editing:  python policy.py
+sops:
+  - id: HEAT-VUL-01
+    title: Heat risk for children, elderly and pets
+    category: vulnerable_groups
+    severity: high
+    applies_to: {activities: any, audiences: [children, elderly, pets]}
+    when:
+      - feels_like_max_c >= 35
+    must_quote: [feels_like_max_c]
+    guidance: >
+      It will feel as hot as {feels_like_max_c}°C during {hours}. Children, older adults and pets overheat faster
+      than healthy adults. Keep outings short and in shade, give water often, never leave anyone in a parked car,
+      and check pavement heat with your hand before walking a pet.
+
+  - id: COLD-VUL-01
+    title: Cool conditions for children, elderly and pets
+    category: vulnerable_groups
+    severity: low
+    applies_to: {activities: any, audiences: [children, elderly, pets]}
+    when:
+      - temp_min_c <= 10
+    guidance: >
+      Temperatures drop to {temp_min_c}°C during {hours}. Dress children and older adults in warm layers and limit
+      long periods sitting still outdoors; short-haired pets may need a coat.

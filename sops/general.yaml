@@ -1,0 +1,15 @@
+# The default all-clear (only when nothing else applies).
+# Field reference: sops/README.md. Validate after editing:  python policy.py
+sops:
+  - id: CLEAR-01
+    title: No weather-risk policy triggered
+    category: general
+    severity: info
+    applies_to: {activities: [cycling, two_wheeler, running, hiking, climbing, picnic, travel, general_outdoor]}
+    default: true
+    when:   # "normal conditions" envelope: outside it, an all-clear isn't defensible -> no guidance
+      - feels_like_min_c > 0 and feels_like_max_c < 40 and gust_max_kmh < 60 and precip_total_mm < 10 and uv_max < 11
+    guidance: >
+      None of our weather-risk policies are triggered for {activity} in {place} during {hours}. Forecast: up to
+      {temp_max_c}°C (feels like {feels_like_max_c}°C), {precip_prob_max_pct}% rain chance, gusts up to
+      {gust_max_kmh} km/h, UV up to {uv_max}.

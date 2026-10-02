@@ -66,6 +66,8 @@ def compose(state: State):
         reply, grounded = "", False
     if not grounded:
         reply = template(sops)
+    if state.get("banner"):  # override branch: the weather system is named first, by code
+        reply = f"{state['banner']}\n\n{reply}"
     cites = " · ".join(f"{s['id']} ({s['severity']})" for s in sops)
     # The LLM's one judgement call (how it read the question), shown so a misreading is visible to the user.
     who = "yourself" if state["audience"] == "self" else state["audience"]

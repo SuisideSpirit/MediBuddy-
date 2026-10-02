@@ -20,6 +20,8 @@ class State(TypedDict, total=False):
     explain: bool         # user asked "why did you say that?" -> explain node
     place: dict | None    # geocode: {name, lat, lon}
     weather: dict | None  # fetch_weather: {place, window, hours, observed_at, metrics}
-    error: str | None     # set by geocode/fetch_weather -> routes to weather_failed
+    error: str | None     # understand -> intake_failed; geocode/fetch_weather -> weather_failed
     sops: list            # match_sops: rendered SOPs, highest severity first
     grounded: bool | None # compose: True if the LLM's wording passed verify(), False if the template was used
+    situational: bool     # match_sops: a situational SOP (weather system) matched -> override branch
+    banner: str | None    # override: code-written lead line naming the weather system, prepended by compose

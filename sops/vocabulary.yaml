@@ -1,0 +1,17 @@
+# What the bot understands. `understand` maps the user's words to these keys BY MEANING, using the descriptions.
+# Add an activity here, then list it in the SOPs that should cover it.
+activities:
+  cycling: riding a bicycle or e-bike, biking to work, bike commute
+  two_wheeler: riding a motorbike or scooter
+  running: running, jogging, brisk walking or other outdoor exercise
+  hiking: hiking, trekking, hill or forest walks
+  climbing: rock climbing, bouldering, mountaineering, scrambling up a peak or crag,treking
+  picnic: picnic, outdoor meal, day out at a park or garden
+  travel: driving, road trips, commuting, getting to a station or airport
+  general_outdoor: going outside in general, no specific activity named
+
+audiences:
+  self: the user themselves (default)
+  children: kids, babies, toddlers
+  elderly: older parents, grandparents, seniors
+  pets: dogs, cats or other pets

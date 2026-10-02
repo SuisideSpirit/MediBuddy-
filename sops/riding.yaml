@@ -1,0 +1,28 @@
+# Cycling and two-wheelers.
+# Field reference: sops/README.md. Validate after editing:  python policy.py
+sops:
+  - id: WIND-RIDE-01
+    title: Strong gusts for cyclists and two-wheelers
+    category: two_wheeler
+    severity: high
+    applies_to: {activities: [cycling, two_wheeler]}
+    when:
+      - gust_max_kmh >= 40
+    must_quote: [gust_max_kmh]
+    guidance: >
+      Wind gusts of up to {gust_max_kmh} km/h are forecast during {hours}. Gusts this strong can push a bike or
+      scooter sideways into traffic, so this is a safety risk, not just discomfort. Postpone the ride or use a car
+      or public transport for this window.
+
+  - id: RAIN-RIDE-01
+    title: Wet roads for cyclists and two-wheelers
+    category: two_wheeler
+    severity: moderate
+    applies_to: {activities: [cycling, two_wheeler]}
+    when:
+      - precip_prob_max_pct >= 60
+      - precip_total_mm >= 2
+    guidance: >
+      Rain is likely during {hours} (up to {precip_prob_max_pct}% chance, {precip_total_mm} mm forecast). Roads
+      will be slippery and braking distances longer. If you ride, slow down, wear rain gear and use lights;
+      otherwise consider another way to travel.

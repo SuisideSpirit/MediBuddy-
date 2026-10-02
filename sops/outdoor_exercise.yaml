@@ -1,0 +1,42 @@
+# Running, cycling, hiking, climbing.
+# Field reference: sops/README.md. Validate after editing:  python policy.py
+sops:
+  - id: HEAT-EX-01
+    title: Heat stress during exercise
+    category: exercise
+    severity: high
+    applies_to: {activities: [running, cycling, hiking, climbing]}
+    when:
+      - feels_like_max_c >= 40
+    must_quote: [feels_like_max_c]
+    guidance: >
+      It will feel as hot as {feels_like_max_c}°C during {hours}. Strenuous exercise in this heat risks heat
+      exhaustion. Move your {activity} to early morning or after sunset, carry water, and stop at the first sign
+      of dizziness or headache.
+
+  - id: UV-01
+    title: Very high UV
+    category: exercise
+    severity: moderate
+    applies_to: {activities: [running, cycling, hiking, climbing, picnic, general_outdoor]}
+    when:
+      - uv_max >= 8
+    must_quote: [uv_max]
+    guidance: >
+      The UV index reaches {uv_max} during {hours}, which is very high. Avoid long unprotected sun exposure
+      between late morning and mid-afternoon: use SPF 30+ sunscreen, a hat and sunglasses, and prefer shade or an
+      early-morning or evening slot.
+
+  - id: CLIMB-WET-01
+    title: Wet rock for climbers
+    category: exercise
+    severity: high
+    applies_to: {activities: [climbing]}
+    when:
+      - precip_prob_max_pct >= 50
+      - precip_total_mm >= 1
+      - rain_past_24h_mm >= 5          # rock stays wet and slick for hours after rain stops
+    guidance: >
+      Rock will be wet or likely to get wet in {place} during {hours}: {precip_prob_max_pct}% rain chance,
+      {precip_total_mm} mm forecast, and {rain_past_24h_mm} mm in the past 24 hours. Wet rock loses friction and
+      holds stay slippery after the rain stops, so postpone outdoor climbing or choose an indoor wall.

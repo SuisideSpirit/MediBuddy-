@@ -30,6 +30,8 @@ assert after_fetch({"error": "down"}) == "weather_failed"
 assert after_fetch({"error": None}) == "match_sops"
 assert after_match({"sops": []}) == "no_guidance"
 assert after_match({"sops": [{"id": "X-01"}]}) == "compose"
+assert after_match({"sops": [{"id": "RAIN-SYS-01"}], "situational": True}) == "override"
+assert after_understand({"error": "llm down", "on_topic": False}) == "intake_failed"
 print("router ok")
 
 if "--offline" in sys.argv:
