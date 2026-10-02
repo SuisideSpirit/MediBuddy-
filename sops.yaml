@@ -1,0 +1,253 @@
+# Policy file. The policy team edits this; no code changes needed. Edits apply on the next message (no restart).
+# Validate after editing:  .venv/Scripts/python -m nodes.match_sops
+#
+# understand maps the user's words to these activity/audience keys BY MEANING, using the descriptions.
+activities:
+  cycling: riding a bicycle or e-bike, biking to work, bike commute
+  two_wheeler: riding a motorbike or scooter
+  running: running, jogging, brisk walking or other outdoor exercise
+  hiking: hiking, trekking, hill or forest walks
+  picnic: picnic, outdoor meal, day out at a park or garden
+  travel: driving, road trips, commuting, getting to a station or airport
+  general_outdoor: going outside in general, no specific activity named
+
+audiences:
+  self: the user themselves (default)
+  children: kids, babies, toddlers
+  elderly: older parents, grandparents, seniors
+  pets: dogs, cats or other pets
+
+# ---------------------------------------------------------------------------------------------------------------
+# SOP fields
+#   id, title, category        free text; id is what the bot cites
+#   severity                   info < low < moderate < high < critical
+#   applies_to.activities      list of activity keys, or "any" (any outdoor question, incl. activities with no key)
+#   applies_to.audiences       optional list of audience keys
+#   when                       list of alternatives; the SOP applies if ANY line holds.
+#                              A line is comparisons joined by " and ":  gust_max_kmh >= 40 and precip_total_mm > 2
+#   guidance                   the advice. {placeholders} are filled by code with live numbers - never by the model.
+#   judgement                  instead of `when`, for fuzzy SOPs: the model picks one of `verdicts` from the numbers in `uses`.
+#   must_quote                 optional list of metrics the reply MUST state (e.g. the gust value). If the wording
+#                              leaves one out, the user gets the fixed template instead. Must appear in `guidance`.
+#   default: true              applies only if NO other SOP matched, and (if it has `when`) only while `when` holds.
+#                              Outside that envelope the bot says it has no guidance instead of giving an all-clear.
+#
+# Metrics (window = the hours the user asked about):
+#   temp_max_c, temp_min_c, feels_like_max_c, feels_like_min_c, precip_total_mm, precip_prob_max_pct, wind_max_kmh, gust_max_kmh,
+#   uv_max, thunderstorm (true/false), and window-independent rain context around now:
+#   rain_past_24h_mm, rain_next_24h_mm, rain_48h_mm (past + next 24 h), rain_hours_48h (hours with >= 0.1 mm of those 48)
+# Extra placeholders: {place}, {hours}, {activity}
+#
+# When several SOPs apply: all are shown, highest severity first. If anything high/critical applies, info-level SOPs
+# are dropped (no "lovely day" next to a storm warning).
+# ---------------------------------------------------------------------------------------------------------------
+sops:
+  - id: RAIN-SYS-01
+    title: Active heavy-rain system
+    category: weather_system
+    severity: critical
+    applies_to: {activities: any}
+    when:
+      - rain_past_24h_mm >= 64.5                              # IMD "heavy rain" = 64.5 mm+ in 24 h
+      - rain_next_24h_mm >= 64.5
+      - rain_past_24h_mm >= 35 and rain_next_24h_mm >= 35     # sustained system: neither day extreme alone
+      # persistent system: rain that barely stops, though no hour or day is "heavy" (calibrated on Jun-Sep 2026:
+      # fires on ~10% of monsoon days in Bhopal, 7% Pune, 22% Jabalpur; catches the 3-4 Sep MP system)
+      - rain_hours_48h >= 30 and rain_48h_mm >= 30
+    must_quote: [rain_hours_48h, rain_48h_mm]
+    guidance: >
+      A rain system is affecting {place}: rain in {rain_hours_48h} of the past and next 48 hours, totalling
+      {rain_48h_mm} mm ({rain_past_24h_mm} mm in the past 24 hours, {rain_next_24h_mm} mm forecast for the next 24).
+      Treat any outdoor plan as high risk regardless of activity. Avoid non-essential trips, waterlogged roads and underpasses, and check the IMD district warnings
+      for your area before going out.
+
+  - id: STORM-01
+    title: Thunderstorm in the window
+    category: weather_system
+    severity: critical
+    applies_to: {activities: any}
+    when:
+      - thunderstorm == true
+    guidance: >
+      Thunderstorms are forecast in {place} during {hours}. Postpone outdoor plans for that window. If you are
+      caught outside, get inside a building or a closed car; avoid open ground, isolated trees and water.
+
+  - id: WIND-RIDE-01
+    title: Strong gusts for cyclists and two-wheelers
+    category: two_wheeler
+    severity: high
+    applies_to: {activities: [cycling, two_wheeler]}
+    when:
+      - gust_max_kmh >= 40
+    must_quote: [gust_max_kmh]
+    guidance: >
+      Wind gusts of up to {gust_max_kmh} km/h are forecast during {hours}. Gusts this strong can push a bike or
+      scooter sideways into traffic, so this is a safety risk, not just discomfort. Postpone the ride or use a car
+      or public transport for this window.
+
+  - id: RAIN-RIDE-01
+    title: Wet roads for cyclists and two-wheelers
+    category: two_wheeler
+    severity: moderate
+    applies_to: {activities: [cycling, two_wheeler]}
+    when:
+      - precip_prob_max_pct >= 60
+      - precip_total_mm >= 2
+    guidance: >
+      Rain is likely during {hours} (up to {precip_prob_max_pct}% chance, {precip_total_mm} mm forecast). Roads
+      will be slippery and braking distances longer. If you ride, slow down, wear rain gear and use lights;
+      otherwise consider another way to travel.
+
+  - id: HEAT-EX-01
+    title: Heat stress during exercise
+    category: exercise
+    severity: high
+    applies_to: {activities: [running, cycling, hiking]}
+    when:
+      - feels_like_max_c >= 40
+    must_quote: [feels_like_max_c]
+    guidance: >
+      It will feel as hot as {feels_like_max_c}°C during {hours}. Strenuous exercise in this heat risks heat
+      exhaustion. Move your {activity} to early morning or after sunset, carry water, and stop at the first sign
+      of dizziness or headache.
+
+  - id: UV-01
+    title: Very high UV
+    category: exercise
+    severity: moderate
+    applies_to: {activities: [running, cycling, hiking, picnic, general_outdoor]}
+    when:
+      - uv_max >= 8
+    must_quote: [uv_max]
+    guidance: >
+      The UV index reaches {uv_max} during {hours}, which is very high. Avoid long unprotected sun exposure
+      between late morning and mid-afternoon: use SPF 30+ sunscreen, a hat and sunglasses, and prefer shade or an
+      early-morning or evening slot.
+
+  - id: WIND-OUT-01
+    title: Damaging gusts outdoors
+    category: leisure
+    severity: moderate
+    applies_to: {activities: [hiking, picnic, running, general_outdoor]}
+    when:
+      - gust_max_kmh >= 50
+    guidance: >
+      Gusts of up to {gust_max_kmh} km/h are forecast during {hours}, strong enough to bring down branches. Stay
+      away from tall trees and loose structures, and secure anything that could blow away.
+
+  - id: TRAVEL-RAIN-01
+    title: Rain disruption to road travel
+    category: travel
+    severity: moderate
+    applies_to: {activities: [travel]}
+    when:
+      - precip_total_mm >= 7.5
+      - precip_prob_max_pct >= 80
+    guidance: >
+      {precip_total_mm} mm of rain is forecast during {hours} (up to {precip_prob_max_pct}% chance). Expect slow
+      traffic and possible waterlogging. Allow extra time, avoid flooded stretches and underpasses, and check
+      traffic or transport updates before you leave.
+
+  - id: HEAT-VUL-01
+    title: Heat risk for children, elderly and pets
+    category: vulnerable_groups
+    severity: high
+    applies_to: {activities: any, audiences: [children, elderly, pets]}
+    when:
+      - feels_like_max_c >= 35
+    must_quote: [feels_like_max_c]
+    guidance: >
+      It will feel as hot as {feels_like_max_c}°C during {hours}. Children, older adults and pets overheat faster
+      than healthy adults. Keep outings short and in shade, give water often, never leave anyone in a parked car,
+      and check pavement heat with your hand before walking a pet.
+
+  - id: COLD-VUL-01
+    title: Cool conditions for children, elderly and pets
+    category: vulnerable_groups
+    severity: low
+    applies_to: {activities: any, audiences: [children, elderly, pets]}
+    when:
+      - temp_min_c <= 10
+    guidance: >
+      Temperatures drop to {temp_min_c}°C during {hours}. Dress children and older adults in warm layers and limit
+      long periods sitting still outdoors; short-haired pets may need a coat.
+
+  - id: COLD-EXT-01
+    title: Extreme cold
+    category: weather_system
+    severity: critical
+    applies_to: {activities: any}
+    when:
+      - feels_like_min_c <= -20
+    must_quote: [feels_like_min_c]
+    guidance: >
+      It will feel as cold as {feels_like_min_c}°C in {place} during {hours}. At this level exposed skin can
+      get frostbite within minutes and hypothermia sets in fast. Do not go out for {activity}; if you must go
+      outside, keep it brief, cover all skin and do not go alone.
+
+  - id: COLD-01
+    title: Freezing conditions
+    category: weather_system
+    severity: moderate
+    applies_to: {activities: any}
+    when:
+      - feels_like_min_c <= 0 and feels_like_min_c > -20
+    guidance: >
+      It will feel as cold as {feels_like_min_c}°C in {place} during {hours}. Wear insulated layers, cover hands,
+      ears and face, and watch for ice on paths and roads.
+
+  - id: HEAT-EXT-01
+    title: Extreme heat
+    category: weather_system
+    severity: critical
+    applies_to: {activities: any}
+    when:
+      - feels_like_max_c >= 45
+    must_quote: [feels_like_max_c]
+    guidance: >
+      It will feel as hot as {feels_like_max_c}°C in {place} during {hours}, a level at which heatstroke can
+      develop even at rest. Avoid going out for {activity} during this window; if you must, stay in shade, keep
+      exertion minimal and drink water regularly.
+
+  - id: PICNIC-01
+    title: Picnic suitability
+    category: leisure
+    applies_to: {activities: [picnic]}
+    judgement:
+      uses: [temp_max_c, feels_like_max_c, precip_prob_max_pct, precip_total_mm, wind_max_kmh, uv_max]
+      criteria: >
+        A good picnic day is dry (low rain chance, no meaningful rain), comfortably warm rather than hot or chilly,
+        with no more than a light breeze, and sun that is pleasant rather than harsh. "fair" if one thing is off
+        but manageable with planning (a modest shower chance, a warm afternoon, a breezy spell). "poor" if rain is
+        likely, it is uncomfortably hot or cold, or the wind would make eating outside unpleasant.
+      verdicts:
+        good:
+          severity: info
+          guidance: >
+            Conditions in {place} during {hours} look good for a picnic: up to {temp_max_c}°C with a
+            {precip_prob_max_pct}% rain chance and winds up to {wind_max_kmh} km/h.
+        fair:
+          severity: low
+          guidance: >
+            A picnic in {place} during {hours} is workable with some planning: up to {temp_max_c}°C (feels like
+            {feels_like_max_c}°C), {precip_prob_max_pct}% rain chance, winds up to {wind_max_kmh} km/h. Pick a
+            shaded spot near shelter and keep a backup plan.
+        poor:
+          severity: moderate
+          guidance: >
+            Conditions in {place} during {hours} are not well suited to a picnic: up to {temp_max_c}°C (feels like
+            {feels_like_max_c}°C), {precip_prob_max_pct}% rain chance and winds up to {wind_max_kmh} km/h. Consider
+            another day or an indoor alternative.
+
+  - id: CLEAR-01
+    title: No weather-risk policy triggered
+    category: general
+    severity: info
+    applies_to: {activities: [cycling, two_wheeler, running, hiking, picnic, travel, general_outdoor]}
+    default: true
+    when:   # "normal conditions" envelope: outside it, an all-clear isn't defensible -> no guidance
+      - feels_like_min_c > 0 and feels_like_max_c < 40 and gust_max_kmh < 60 and precip_total_mm < 10 and uv_max < 11
+    guidance: >
+      None of our weather-risk policies are triggered for {activity} in {place} during {hours}. Forecast: up to
+      {temp_max_c}°C (feels like {feels_like_max_c}°C), {precip_prob_max_pct}% rain chance, gusts up to
+      {gust_max_kmh} km/h, UV up to {uv_max}.

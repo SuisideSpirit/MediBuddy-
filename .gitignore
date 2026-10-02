@@ -1,0 +1,6 @@
+.env
+.venv/
+__pycache__/
+
+# assignment brief (not ours to publish)
+*.pdf
