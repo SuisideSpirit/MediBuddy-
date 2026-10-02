@@ -238,7 +238,7 @@ def short_downpour():
       "controlled: calm")
 def scuba():
     with forecast_is(controlled()):
-        t, = chat("Planning to go scuba diving in Goa tomorrow, how does it look?")
+        t, = chat("Planning to go scuba diving near Panjim, Goa tomorrow, how does it look?")
     return check((t["path"][-1] == "no_guidance", f"path {t['path']}"), (not t["sops"], f"SOPs {t['sops']}"),
                  ("written policy" in t["body"], "doesn't say no policy"), ("°C" not in t["body"], "quoted weather")), t
 

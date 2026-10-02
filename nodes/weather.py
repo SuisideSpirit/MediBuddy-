@@ -37,19 +37,26 @@ def _get(url, **params):
     return r.json()
 
 
+ALIASES = {"usa": "united states", "us": "united states", "u.s.": "united states", "america": "united states",
+           "uk": "united kingdom", "britain": "united kingdom", "uae": "united arab emirates"}
+
+
 def pick_place(results, hint=""):
     """Score each result by how many parts of the hint ('himachal pradesh, india') its state/country contain; best
     score wins, population breaks ties. Partial matches count, since the LLM may say 'USA' where the API says
     'United States'.
     Neither the API's first result nor the biggest town is reliably the one meant: 'Greenland' came back first as a
     Barbados village, and 'Manali' as a Chennai suburb (bigger than the hill town). So understand adds the state
-    ('Manali, Himachal Pradesh, India') and the hint decides; population is only the fallback."""
-    parts = [p.strip() for p in hint.lower().split(",") if p.strip()]
+    ('Manali, Himachal Pradesh, India') and the hint decides; population is only the fallback.
+    Returns None if a hint was given but NO result is in that state/country: 'Goa, India' must not become Genoa,
+    Italy (found live) - better to say the place wasn't found."""
+    parts = [ALIASES.get(p.strip(), p.strip()) for p in hint.lower().split(",") if p.strip()]
 
     def score(r):
         where = f"{r.get('admin1', '')} {r.get('country', '')}".lower()
         return sum(p in where for p in parts), r.get("population") or 0
-    return max(results, key=score)  # ties: first result wins
+    best = max(results, key=score)  # ties: first result wins
+    return None if parts and score(best)[0] == 0 else best
 
 
 def geocode(state: State):
@@ -63,6 +70,8 @@ def geocode(state: State):
     if not results:
         return {"error": f"I couldn't find a place called '{name}'"}
     best = pick_place(results, hint)
+    if best is None:
+        return {"error": f"I couldn't find '{name}' in {hint.title()} (only same-named places elsewhere)"}
     label = ", ".join(filter(None, [best["name"], best.get("admin1"), best.get("country")]))
     return {"place": {"name": label, "lat": best["latitude"], "lon": best["longitude"]}}
 
@@ -175,4 +184,8 @@ if __name__ == "__main__":
     spring = [{"name": "Springfield", "admin1": "Missouri", "country": "United States", "population": 169176},
               {"name": "Springfield", "admin1": "Illinois", "country": "United States", "population": 114394}]
     assert pick_place(spring, "illinois, usa")["admin1"] == "Illinois"   # 'usa' != 'United States', state still wins
+    assert pick_place(spring, "usa")["admin1"] == "Missouri"              # alias: country-only hint still matches
+    goa = [{"name": "Genoa", "admin1": "Liguria", "country": "Italy", "population": 580097},
+           {"name": "Goa", "admin1": "Bicol Region", "country": "Philippines", "population": 20936}]
+    assert pick_place(goa, "india") is None and pick_place(goa)["name"] == "Genoa"  # hint matches nothing -> not found
     print("pick_place ok")
